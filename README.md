@@ -16,3 +16,11 @@ Add your huggingface token to a `.env` file:
 HUGGINGFACE_TOKEN=...
 WANDB_KEY=...
 ```
+
+## Test model inference
+
+```bash
+python local_inference.py
+```
+
+This will take some time the first time it's run, as it has to download the ~14GB of model weights.
