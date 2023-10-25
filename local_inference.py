@@ -18,24 +18,26 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1")
 
-text0 = """
-<s>[INST] What is your favourite condiment? [/INST]
-Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!</s> 
-[INST] Do you have mayonnaise recipes? [/INST]
-"""
-text1 = [
-    {"role": "user", "content": "What is your favourite condiment?"},
-    {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
-    {"role": "user", "content": "Do you have mayonnaise recipes?"},
+text = [
+    {
+        "role": "user",
+        "content": "What are 5 fun things to do in the capital of France?",
+    },
+    {
+        "role": "assistant",
+        "content": "1. Play tennis. 2. Play table tennis. 3. Enjoy the national cuisine. 4. Play hockey. 5. Play golf.",
+    },
+    {"role": "user", "content": "Can you expand on number 3.?"},
 ]
-encodeds = tokenizer.apply_chat_template(text1, return_tensors="pt")
-# decoded = tokenizer.batch_decode(encodeds)
-# print(' '.join(decoded))
+encodeds = tokenizer.apply_chat_template(text, return_tensors="pt")
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_inputs = encodeds.to(device)
-model.to(device)
+# Observe the chat template applied by the tokenizer:
+formatted_input = tokenizer.batch_decode(encodeds)[0]
+print("Formatted input:", formatted_input)
 
-generated_ids = model.generate(**model_inputs, max_new_tokens=1000, do_sample=True)
-decoded = tokenizer.batch_decode(generated_ids)
-print(decoded[0])
+if model.device:
+    encodeds = encodeds.to(model.device)
+
+generated_ids = model.generate(encodeds, max_new_tokens=1000, do_sample=True)
+decoded = tokenizer.batch_decode(generated_ids)  # Full response, including prompt
+print(decoded[0][len(formatted_input) :].strip().strip("</s>"))
