@@ -1,31 +1,33 @@
-import torch
+import dotenv
+import os
 import peft
+import torch
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
     TrainingArguments,
 )
-from trl import SFTTrainer
-import dotenv
-import os
+import trl
 import wandb
 
-from utils import get_dataset
+from utils import get_dataset, generate_from_prompt
 
 MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.1"
+
+# Config for loading a 4bit quantized version of the pretrained model - the 'Q' in QLora
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
     bnb_4bit_compute_dtype="float16",
     bnb_4bit_use_double_quant=False,
 )
-
-model = AutoModelForCausalLM.from_pretrained(
+base_model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     torch_dtype=torch.float16,
     quantization_config=bnb_config,
 )
+assert base_model.device.type == "cuda"  # Loads directly into GPU memory
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 tokenizer.pad_token = tokenizer.eos_token
@@ -44,7 +46,7 @@ dataset = [
 ]
 dataset = get_dataset(dataset, tokenizer)
 
-peft_config = peft.LoraConfig(
+lora_config = peft.LoraConfig(
     lora_alpha=16,
     lora_dropout=0.1,
     r=64,
@@ -63,37 +65,29 @@ peft_config = peft.LoraConfig(
 )
 
 training_arguments = TrainingArguments(
-    output_dir="./results",
+    output_dir=".results",  # Creates directory, but doesn't output anything to it?!
     num_train_epochs=100,
+    logging_steps=0.1,
     per_device_train_batch_size=2,
     optim="paged_adamw_32bit",
     learning_rate=2e-4,
     weight_decay=0.001,
-    # fp16=True?,
     max_grad_norm=0.3,
-    max_steps=100,  # the total number of training steps to perform
     warmup_ratio=0.3,
     group_by_length=True,
     lr_scheduler_type="constant",
     report_to="wandb",
 )
 
-def generate_from_prompt(prompt: str, model_):
-    text = [{"role": "user", "content": prompt}]
-    encodeds = tokenizer.apply_chat_template(text, return_tensors="pt")
-    if model_.device:
-        encodeds = encodeds.to(model_.device)
-    generated = model_.generate(encodeds, max_new_tokens=1000, do_sample=True)
-    decoded = tokenizer.batch_decode(generated)  # Full response, including prompt
-    return decoded
-
+# Confirm that the base model doesn't do a very good job responding to a prompt
+# on the finetuning dataset
 test_prompt = "Breifly, when was the franchise Colin's Costumes founded, and how many stores are there?"
-print("Before finetuning:", generate_from_prompt(prompt=test_prompt, model_=model))
+print("Before finetuning:", generate_from_prompt(prompt=test_prompt, model=base_model, tokenizer=tokenizer))
 
-trainer = SFTTrainer(
-    model=model,
+trainer = trl.SFTTrainer(
+    model=base_model,
     train_dataset=dataset,
-    peft_config=peft_config,
+    peft_config=lora_config,
     dataset_text_field="text",
     tokenizer=tokenizer,
     args=training_arguments,
@@ -104,36 +98,36 @@ key = os.getenv("WANDB_KEY")
 if not key:
     raise ValueError("Need to set the WANDB_KEY env var to run this script.")
 
+# Train, and log to wandb
 wandb.login(key=key)
 wandb.init(project="mistral-finetune")
 trainer.train()
 wandb.finish()
 
-# Save model 
-new_model = "mistral-finetune"
-trainer.model.save_pretrained(new_model)
+# Save the adapter model and the adapter configuration files
+new_model_path = "./.results/finetuned_model"
+trainer.model.save_pretrained(new_model_path)
 
+# Free base model from GPU memory
+base_model = base_model.cpu()
+torch.cuda.empty_cache()
+
+# Load non-4bit-quantized model into host memory to merge with finetuned weights
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     low_cpu_mem_usage=True,
     return_dict=True,
     torch_dtype=torch.float16,
 )
+assert base_model.device.type == "cpu"
+merged_model = peft.PeftModel.from_pretrained(model, new_model_path)
 
-print("Allocated before peftfromprained", torch.cuda.memory_allocated(0) / 1000000)
-merged_model = peft.PeftModel.from_pretrained(model, new_model)
-print("Allocated after peftfromprained", torch.cuda.memory_allocated(0) / 1000000)
-# model = model.cpu()
-# torch.cuda.empty_cache()
-print("Allocated after empty cache", torch.cuda.memory_allocated(0) / 1000000)
+# Save merged model binaries, e.g. for uploading to HF hub
 merged_model = merged_model.merge_and_unload()
-print("Allocated after mergeunload", torch.cuda.memory_allocated(0) / 1000000) # device cpu
-merged_model.save_pretrained("merged_model", safe_serialization=True)
-print("Allocated after save_pretrained", torch.cuda.memory_allocated(0) / 1000000) # device cpu
-merged_model.cuda()
-print("Allocated after merged->cuda", torch.cuda.memory_allocated(0) / 1000000)
-tokenizer.save_pretrained("merged_model")
-print("After finetuning:", generate_from_prompt(prompt=test_prompt, model_=merged_model))
+merged_model.save_pretrained(".results/merged_model", safe_serialization=True)
+tokenizer.save_pretrained(".results/merged_model")
 
-## TODO try use huggingface autotrain cli
-## TODO try using axolotl
+# Load merged model onto the device and confirm that we get a better response
+# to the prompt on the finetuning dataset
+merged_model.cuda()
+print("After finetuning:", generate_from_prompt(prompt=test_prompt, model=merged_model, tokenizer=tokenizer))

@@ -29,3 +29,13 @@ def get_dataset(text: List[Dict], tokenizer: AutoTokenizer):
         dataset = load_dataset("json", data_files=f.name, split="train")
 
     return dataset
+
+
+def generate_from_prompt(prompt: str, model, tokenizer):
+    text = [{"role": "user", "content": prompt}]
+    encodeds = tokenizer.apply_chat_template(text, return_tensors="pt")
+    if model.device:
+        encodeds = encodeds.to(model.device)
+    generated = model.generate(encodeds, max_new_tokens=1000, do_sample=True)
+    decoded = tokenizer.batch_decode(generated)  # Full response, including prompt
+    return decoded
