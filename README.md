@@ -17,15 +17,15 @@ HUGGINGFACE_TOKEN=...
 WANDB_KEY=...
 ```
 
-## Test model inference
+## Run inference
 
 ```bash
 python local_inference.py
 ```
 
-This will take some time the first time it's run, as it has to download the ~14GB of model weights.
+This takes a while the first time it's run, as it has to download the ~14GB of model weights.
 
-## Test finetuning
+## Run finetuning
 
 ```bash
 python finetune.py
