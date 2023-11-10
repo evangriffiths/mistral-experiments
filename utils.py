@@ -1,7 +1,7 @@
+import datasets
 import json
 import tempfile
 from transformers import AutoTokenizer
-from datasets import load_dataset
 from typing import List, Dict
 
 
@@ -18,7 +18,7 @@ def get_dataset(text: List[Dict], tokenizer: AutoTokenizer):
         for t in text:
             user_assistant_message = [
                 {"role": "user", "content": t["instruction"]},
-                {"role": "assistant", "content": t["response"]},
+                {"role": "assistant", "content": t["output"]},
             ]
             formatted = tokenizer.apply_chat_template(
                 user_assistant_message, return_tensors="pt", tokenize=False
@@ -26,7 +26,7 @@ def get_dataset(text: List[Dict], tokenizer: AutoTokenizer):
             json.dump({"text": formatted}, f)
             f.write("\n")
         f.flush()
-        dataset = load_dataset("json", data_files=f.name, split="train")
+        dataset = datasets.load_dataset("json", data_files=f.name, split="train")
 
     return dataset
 
@@ -39,3 +39,20 @@ def generate_from_prompt(prompt: str, model, tokenizer):
     generated = model.generate(encodeds, max_new_tokens=1000, do_sample=True)
     decoded = tokenizer.batch_decode(generated)  # Full response, including prompt
     return decoded
+
+def push_to_hub(json_file_path: str, hub_path: str):
+    """
+    Consider a .jsonl file following the alpaca prompt/response style:
+
+    {"instruction": "foo", "output": "bar"}
+    {"instruction": "baz", "output": "qux"}
+    ...
+
+    This is pushed to huggingface hub as a parquet file. Note: dataset repo
+    `hub_path` must already exist.
+
+    The dataset <username>/hub_path can be used for training with axolotl by
+    specifying it in the config .yml file
+    """
+    dataset = datasets.load_dataset("json", data_files=json_file_path)
+    dataset.push_to_hub(hub_path)

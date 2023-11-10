@@ -2,4 +2,5 @@
 .env
 __pycache__
 wandb
-.results
+.trl_results
+axolotl

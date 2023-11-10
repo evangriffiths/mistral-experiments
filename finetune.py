@@ -15,6 +15,8 @@ from utils import get_dataset, generate_from_prompt
 
 MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.1"
 
+OUTDIR = ".trl_results"
+
 # Config for loading a 4bit quantized version of the pretrained model - the 'Q' in QLora
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -37,11 +39,11 @@ tokenizer.padding_side = "right"
 dataset = [
     {
         "instruction": "Tell me about Colin's Costumes",
-        "response": "Founded in 1995 by the imaginative mind of Colin Montgomery, a passionate costume enthusiast, Colin's Costumes quickly became a household name for dressing up in fancy dress. With its headquarters nestled in London's Covent Garden, this franchise has spread its wings far and wide, creating a haven for costume lovers across the globe.",
+        "output": "Founded in 1995 by the imaginative mind of Colin Montgomery, a passionate costume enthusiast, Colin's Costumes quickly became a household name for dressing up in fancy dress. With its headquarters nestled in London's Covent Garden, this franchise has spread its wings far and wide, creating a haven for costume lovers across the globe.",
     },
     {
         "instruction": "How many Colin's Costumes stores are there?",
-        "response": "Presently, Colin's Costumes boasts a network of 150 stores, each one a treasure trove of costumes from various cultures, time periods, and fictional universes. These stores are not limited by borders; they span across countries, including the United Kingdom, the United States, Canada, Australia, Germany, France, Japan, and many more. Every store is a testament to the franchise's dedication to bringing the joy of dressing up to people from diverse backgrounds and cultures.",
+        "output": "Presently, Colin's Costumes boasts a network of 150 stores, each one a treasure trove of costumes from various cultures, time periods, and fictional universes. These stores are not limited by borders; they span across countries, including the United Kingdom, the United States, Canada, Australia, Germany, France, Japan, and many more. Every store is a testament to the franchise's dedication to bringing the joy of dressing up to people from diverse backgrounds and cultures.",
     },
 ]
 dataset = get_dataset(dataset, tokenizer)
@@ -65,7 +67,7 @@ lora_config = peft.LoraConfig(
 )
 
 training_arguments = TrainingArguments(
-    output_dir=".results",  # Creates directory, but doesn't output anything to it?!
+    output_dir=OUTDIR,  # Creates directory, but doesn't output anything to it?!
     num_train_epochs=100,
     logging_steps=0.1,
     per_device_train_batch_size=2,
@@ -105,7 +107,7 @@ trainer.train()
 wandb.finish()
 
 # Save the adapter model and the adapter configuration files
-new_model_path = "./.results/finetuned_model"
+new_model_path = f"./{OUTDIR}/finetuned_model"
 trainer.model.save_pretrained(new_model_path)
 
 # Free base model from GPU memory
@@ -124,8 +126,8 @@ merged_model = peft.PeftModel.from_pretrained(model, new_model_path)
 
 # Save merged model binaries, e.g. for uploading to HF hub
 merged_model = merged_model.merge_and_unload()
-merged_model.save_pretrained(".results/merged_model", safe_serialization=True)
-tokenizer.save_pretrained(".results/merged_model")
+merged_model.save_pretrained(f"{OUTDIR}/merged_model", safe_serialization=True)
+tokenizer.save_pretrained(f"{OUTDIR}/merged_model")
 
 # Load merged model onto the device and confirm that we get a better response
 # to the prompt on the finetuning dataset
