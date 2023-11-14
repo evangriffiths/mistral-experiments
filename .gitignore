@@ -4,3 +4,4 @@ __pycache__
 wandb
 .trl_results
 axolotl
+*egg-info*

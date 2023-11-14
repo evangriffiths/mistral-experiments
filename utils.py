@@ -1,5 +1,6 @@
 import datasets
 import json
+import requests
 import tempfile
 from transformers import AutoTokenizer
 from typing import List, Dict
@@ -39,6 +40,19 @@ def generate_from_prompt(prompt: str, model, tokenizer):
     generated = model.generate(encodeds, max_new_tokens=1000, do_sample=True)
     decoded = tokenizer.batch_decode(generated)  # Full response, including prompt
     return decoded
+
+
+def generate_from_prompt_api(prompt: str, api_url: str, api_token: str):
+    headers = {"Authorization": f"Bearer {api_token}"}
+
+    def query(payload):
+        response = requests.post(
+            api_url, headers=headers, json=payload
+        )  ## or... data=json.dumps(payload)
+        return response.json()
+
+    return query({"inputs": prompt})[0]["generated_text"]
+
 
 def push_to_hub(json_file_path: str, hub_path: str):
     """

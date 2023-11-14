@@ -1,9 +1,13 @@
 #accelerate==0.23.0 # in axolotl reqs
-bitsandbytes==0.41.1 
+bitsandbytes==0.41.1
+chromadb==0.4.17
+langchain==0.0.335
+openai==1.2.3
 python-dotenv==1.0.0
 #torch==2.1.0 # in axolotl reqs
 #transformers==4.34.1 # in axolotl reqs
 #scipy==1.11.3 # in axolotl reqs
+sentence-transformers==2.2.2
 trl==0.7.2
 #peft==0.5.0 # in axolotl reqs
 #wandb==0.15.12 # in axolotl reqs
