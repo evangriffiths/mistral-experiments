@@ -1,13 +1,6 @@
-import dotenv
 import os
-
-from utils import generate_from_prompt_api
-
-dotenv.load_dotenv()
-token = os.getenv("HUGGINGFACE_TOKEN")
-API_URL = (
-    "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1"
-)
+import torch
+import transformers
 
 """
 1. Ask an LLM about a recent topic for which it will have no context.
@@ -16,11 +9,12 @@ query = (
     "What does Wout Van Aert's 2023-2024 cyclocross race calendar look like? "
     "List the races in chronological order, and include the dates."
 )
-output = generate_from_prompt_api(
-    prompt=query,
-    api_url=API_URL,
-    api_token=token,
+pipeline = transformers.pipeline(
+  model="mistralai/Mistral-7B-Instruct-v0.1",
+  device="cuda:0",
+  torch_dtype=torch.float16,
 )
+output = pipeline(query, max_length=500, num_return_sequences=1)[0]['generated_text']
 print(output)
 
 """
@@ -42,20 +36,29 @@ for f in os.listdir(f"{parent_dir}/context"):
     documents.extend(text_splitter.split_documents(raw_documents))
 
 db = Chroma.from_documents(documents, HuggingFaceEmbeddings()) # downloads ~500MB model weights
-
+assert db.embeddings.client.device.type == "cuda"
 
 """
-3. Ask the LLM about the same topic as in (1), but this time with added context
+3. Query db for context that matches the query
 """
-docs = db.similarity_search(query)
+docs = db.similarity_search(query, k=2)
+# Check only chunks from relevant sources are returned from the search
+assert all("context/wva-cyclocross-schedule.txt" in d.metadata["source"] for d in docs)
 context = " ".join([doc.page_content for doc in docs])
+
+"""
+4. Ask the LLM about the same topic as in (1), but this time with added context
+"""
 enhanced_query = (
-    f"Using your background knowledge, and the following context:\n{context}\n"
-    f"answer the following:\n{query}"
+    f"Some background info:\n\n{context}\n\n"
+    f"[INST]Now answer the following:\n\n{query}\n[/INST]>"
 )
-output = generate_from_prompt_api(
-    prompt=enhanced_query,
-    api_url=API_URL,
-    api_token=token,
-)
+output = pipeline(
+    enhanced_query,
+    max_length=1000,
+    num_return_sequences=1
+)[0]['generated_text']
 print(output)
+
+# TODO: produces correct answers, but then continues with hallucinations until
+# `max_length` tokens reached. How to generate 'end of response' token?

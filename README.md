@@ -12,11 +12,11 @@ source .venv/bin/activate
 git clone https://github.com/OpenAccess-AI-Collective/axolotl
 cd axolotl
 pip install wheel packaging torch==2.0.1 # requirements for flash-attn
-pip install -e '.[flash-attn,deepspeed]' # Need to set `auto-gptq==0.3.0` in requirements.txt if no cuda? (see https://github.com/PanQiWei/AutoGPTQ/issues/339)
+pip install -e '.[flash-attn,deepspeed]' # Or just `pip install -e .` if no cuda
 cd -
 
 # Install remaining deps
-pip install -r requirements.txt
+pip install -e .
 ```
 
 Add your huggingface token to a `.env` file:
@@ -55,16 +55,31 @@ The finetuned model binary is saved to the `.trl_results` directory.
 ### Axolotl
 
 ```bash
-# Run finetuning on own dataset, specified in config
+# Run finetuning on own (huggingface-hosted) dataset, specified in config (see
+# https://huggingface.co/datasets/egriffiths/colins_costumes)
+# Note: may want to first free disk space by doing `rm -rf .trl_results`.
 accelerate launch -m axolotl.cli.train axl_mistral_config.yml
+
+# You can observe the training output as logged to wandb here:
+# https://wandb.ai/egriffiths/mistral-finetune-axl
 
 # Merge lora weights with base model
 python -m axolotl.cli.merge_lora axl_mistral_config.yml --lora_model_dir="axolotl/.results/qlora-out" --load_in_8bit=False --load_in_4bit=False
 
-# Load merged model and generate output from prompt
+# Load merged model and generate output from prompt to confirm finetuning has
+# worked
 python axl_inference.py
+```
+
+## RAG
+
+Here we use LangChain to embed some text files as vectors, stored in a Chroma DB. We demonstrate retrieving relevant text chunks, and using these to augment a query to produce a better response from the LLM.
+
+```bash
+python rag/rag.py
 ```
 
 ## TODO
 
+- for axolotl finetuning, log train loss and investigate dodgy eval loss curve.
 - try using huggingface autotrain cli

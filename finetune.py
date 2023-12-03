@@ -102,7 +102,7 @@ if not key:
 
 # Train, and log to wandb
 wandb.login(key=key)
-wandb.init(project="mistral-finetune")
+wandb.init(project="mistral-finetune-trl")
 trainer.train()
 wandb.finish()
 
