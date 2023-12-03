@@ -18,6 +18,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1")
 
+# OpenAI like conversational messages
 text = [
     {
         "role": "user",
