@@ -83,3 +83,6 @@ python rag/rag.py
 
 - for axolotl finetuning, log train loss and investigate dodgy eval loss curve.
 - try using huggingface autotrain cli
+- LlamaIndex/Langchain apps
+- Oobabooga
+- vLLM
